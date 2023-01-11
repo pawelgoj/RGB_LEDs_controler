@@ -1,59 +1,23 @@
 import machine
-import utime
 import _thread
 import os
+import utime
+from visual_effects import VisualEffects
+from button import Button
+from functions import change_specific_color
+from button import ButtonChangeColor
 
-global button_change_color
-button_change_color: machine.Pin = machine.Pin(16, machine.Pin.IN,
+
+button_change_color_pin: machine.Pin = machine.Pin(16, machine.Pin.IN,
                                                machine.Pin.PULL_DOWN)
 
-
-global state_of_button_change_color
-state_of_button_change_color: str = 'b'
-
-global button_on_off_pressed
-button_on_off_pressed: bool = False 
+state_of_button_change_color: ButtonChangeColor = ButtonChangeColor('b')
 
 
-class VisualEffects: 
-    time: int|None = None
-    time_interval: int = 1000
-    
-    def __init__(self, list_led_b: list[machine.PWM], 
-                 list_led_g: list[machine.PWM], 
-                 list_led_r: list[machine.PWM], temp_colors: list[int]) -> None: 
-        
-        self.list_led_b = list_led_b
-        self.list_led_g = list_led_g
-        self.list_led_r = list_led_r
-        self.temp_colors = temp_colors
-        
-    def breath_effect(self) -> None:
+button_on_off_pressed: bool = False
 
-        time = utime.ticks_ms() 
-        if time == None:
-            self.time = utime.ticks_ms()
-        elif utime.ticks_diff(self.time_interval, time) > 0:
-            change_specific_color(list_led_b, 0)
-            change_specific_color(list_led_g, 0)
-            change_specific_color(list_led_r, 0)
-        elif  t := utime.ticks_diff(2 * self.time_interval, time) > 0: 
-            change_specific_color(list_led_b, (temp_colors[0] / t))
-            change_specific_color(list_led_g, (temp_colors[1] / t))
-            change_specific_color(list_led_r, (temp_colors[2] / t))
-        elif  utime.ticks_diff(3 * self.time_interval, time) > 0:
-            change_specific_color(list_led_b, temp_colors[0])
-            change_specific_color(list_led_g, temp_colors[1])
-            change_specific_color(list_led_r, temp_colors[2])
-        elif  t := utime.ticks_diff(4 * self.time_interval, time) > 0:
-            change_specific_color(list_led_b, (temp_colors[0] / self.time_interval) * t)
-            change_specific_color(list_led_b, (temp_colors[1] / self.time_interval) * t)
-            change_specific_color(list_led_b, (temp_colors[2] / self.time_interval) * t)
-        elif  utime.ticks_diff(5 * self.time_interval, time) <= 0:
-            self.time = utime.ticks_ms()
-    
-    def effect_loop(self) -> None: 
-        
+start_button_oscillation_time: int|None = 0
+
 
         
 def load_saved_colors_form_file() -> tuple[dict, bool]:
@@ -81,77 +45,81 @@ def load_saved_colors_form_file() -> tuple[dict, bool]:
                 first_run = False
     
     return colors, first_run
+        
+        
 
 
-def button_change_color_fn(recent: int|None, state_of_button_change_color: str, 
-                        time: int, after_saved: bool) \
-                        -> tuple[int|None, str, int, bool]:
+def button_change_color_fn(state_of_button_change_color: ButtonChangeColor, 
+                        time: int|None, after_saved: bool, button_change_color: Button, last_button_state: str) \
+                        -> tuple[ButtonChangeColor, int|None, bool, str]:
     """Function specifying the state of the color change button
 
     Args:
-        recent (int): the binary state of the button (pressed down: 1, release: 0) during 
-        an earlier iteration 
         state_of_button_change_color (str): colors 'r', 'g', 'b' or 'save', 'loaded'
         time (int): time.ticks_ms()
         after_saved (bool): Was the previous state_of_button_change_color 'save'? True/False
-
+        button_change_color (Button): Button object
+        last_button_state: (str): 
     Returns:
-        tuple(recent, state_of_button_change_color, iteration, after_saved)
+        tuple(state_of_button_change_color, iteration, after_saved, last_button_state)
     """
+    pressed = button_change_color.pressed
     
-    if button_change_color.value() == 0:
+    if (pressed is True) and (time is None):
         time = utime.ticks_ms()
-        
-    if (button_change_color.value() == 0 and after_saved):
+        time_diff = -1
+    elif (pressed is False) and (time is not None):
+        time_diff = utime.ticks_diff(utime.ticks_ms(), time)
+        time = None
+    else:
+        time_diff = -1
+    
+    if after_saved:
         after_saved = False
-        state_of_button_change_color = 'loaded'
+        state_of_button_change_color.state = 'loaded'
         
-    elif (button_change_color.value() == 0 and recent != button_change_color.value()
-        and utime.ticks_diff(3000, time) > 0): 
-        if state_of_button_change_color == 'b':
-            state_of_button_change_color = 'g'
-        elif state_of_button_change_color == 'g':
-            state_of_button_change_color = 'r'
-        elif state_of_button_change_color == 'r':
-            state_of_button_change_color = 'b'
-        elif state_of_button_change_color == 'save':
-            state_of_button_change_color = 'loaded'
-        elif state_of_button_change_color == 'loaded' or state_of_button_change_color == 'visual_effects':
-            state_of_button_change_color = 'b'
+    elif time_diff < 1500 and time_diff >= 0: 
+
+        if state_of_button_change_color.state == 'b':
+            state_of_button_change_color.state = 'g'
+        elif state_of_button_change_color.state == 'g':
+            state_of_button_change_color.state = 'r'
+        elif state_of_button_change_color.state == 'r':
+            state_of_button_change_color.state = 'b'
+        elif state_of_button_change_color.state == 'loaded':
+            state_of_button_change_color.state = 'b'
+        elif state_of_button_change_color.state == 'visual_effects':
+            state_of_button_change_color.state = 'change'
             
-    elif utime.ticks_diff(3000, time) <= 0 and utime.ticks_diff(5000, time) > 0 \
-        and button_change_color.value() == 0 \
-        and recent != button_change_color.value():
-        state_of_button_change_color = 'save'
+    elif (time_diff < 4000) and (time_diff >= 1500):
+        last_button_state = state_of_button_change_color.state
+        state_of_button_change_color.state = 'save'
         after_saved = True
         
-    elif utime.ticks_diff(5000, time) <= 0:
-        state_of_button_change_color = 'visual_effects'
-    
-    recent = button_change_color.value() 
-    
-    return recent, state_of_button_change_color, time, after_saved
+    elif time_diff >= 4000:
+        state_of_button_change_color.state = 'visual_effects'
+        
+    return state_of_button_change_color, time, after_saved, last_button_state
 
 def button_on_off_thread() -> None:
+    
+    import utime 
     """The thread for handling button events
     """
     
     global state_of_button_change_color
+    button_change_color = Button(button_change_color_pin)
     
-    recent_rgb =  0
-    time = utime.ticks_ms()
+
+    time = None
     after_saved = False
+    last_button_state = 'b'
     
     while True:
-        recent_rgb, state_of_button_change_color , time, after_saved =\
-            button_change_color_fn(recent_rgb, state_of_button_change_color, 
-                                   time, after_saved)
-        
-
-    
-def change_specific_color(list_of_pins: list[machine.PWM], result: int) -> None:
-    for item in list_of_pins:
-        item.duty_u16(result)
+        state_of_button_change_color , time, after_saved, last_button_state =\
+            button_change_color_fn(state_of_button_change_color, 
+                                   time, after_saved, button_change_color, last_button_state)
+            
 
 def prepare_pins(red_led_pins: list[int], green_led_pins: list[int], 
                  blue_led_pins: list[int]) -> tuple[list[machine.PWM], 
@@ -198,7 +166,7 @@ list_led_b, list_led_g, list_led_r = prepare_pins([15, 12, 9], [14, 11, 8], [13,
 
 colors, first_run = load_saved_colors_form_file()
 
-state_of_button_change_color = 'b' if first_run else 'loaded'
+state_of_button_change_color.state = 'b' if first_run else 'loaded'
 
 #thread with handling buttons events 
 _thread.start_new_thread(button_on_off_thread, ())
@@ -206,22 +174,23 @@ _thread.start_new_thread(button_on_off_thread, ())
 temp_colors = [colors['b'], colors['g'], colors['r']]
 visual_effects = VisualEffects(list_led_b, list_led_g, list_led_r, temp_colors)
 
+#main loop
 while True:
     result: int = (0 if potentiometer.read_u16() < 300 else potentiometer.read_u16())
     
-    if state_of_button_change_color == 'b':
+    if state_of_button_change_color.state == 'b':
         temp_colors[0] = result
         change_specific_color(list_led_b, result)
         
-    elif state_of_button_change_color == 'g':
+    elif state_of_button_change_color.state == 'g':
         temp_colors[1] = result
         change_specific_color(list_led_g, result)
         
-    elif state_of_button_change_color == 'r':
+    elif state_of_button_change_color.state == 'r':
         temp_colors[2] = result
         change_specific_color(list_led_r, result)
         
-    elif state_of_button_change_color == 'save':
+    elif state_of_button_change_color.state == 'save':
         first_run = False
         colors['b'] = temp_colors[0]
         colors['g'] = temp_colors[1]
@@ -231,20 +200,22 @@ while True:
             string_to_file = f"{colors['b']} {colors['g']} {colors['r']}"
             file.write(string_to_file)
 
-    elif state_of_button_change_color == 'loaded':
+    elif state_of_button_change_color.state == 'loaded':
         change_specific_color(list_led_b, colors['b'])
         change_specific_color(list_led_g, colors['g'])
         change_specific_color(list_led_r, colors['r'])
         
-    elif state_of_button_change_color == 'visual_effects':
+    elif state_of_button_change_color.state == 'visual_effects':
         visual_effects.temp_colors = temp_colors
-        visual_effects.breath_effect()
+        visual_effects.current_effect = 'breath_effect'
+        visual_effects.effect_loop(potentiometer, state_of_button_change_color, list_led_b, list_led_g, 
+                                   list_led_r, temp_colors)
     
     elif not first_run:
         change_specific_color(list_led_b, 0)
         change_specific_color(list_led_g, 0)
         change_specific_color(list_led_r, 0)
-        state_of_button_change_color = 'loaded'
+        state_of_button_change_color.state = 'loaded'
         
     elif first_run:
         change_specific_color(list_led_b, 0)
