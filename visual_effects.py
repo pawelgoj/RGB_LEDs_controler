@@ -78,6 +78,9 @@ class VisualEffects:
             change_specific_color(list_led_r, int(self.constant * ((t - 5 * self.time_interval) /self.time_interval)))
         else:
             self.time = utime.ticks_ms()
+            change_specific_color(list_led_b, 0)
+            change_specific_color(list_led_g, 0)
+            change_specific_color(list_led_r, self.constant)
     
     def effect_loop(self, potentiometer: machine.ADC, state_of_button_change_color: ButtonChangeColor, list_led_b: list, list_led_g: list, list_led_r: list, temp_colors: list) -> None: 
         
